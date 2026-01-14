@@ -21,28 +21,63 @@ exports.getCommentsForPost = catchAsync(async (req , res , next) => {
     
 })
 
-exports.createComment = catchAsync(async (req , res , next) => {
-    
-        const {postId} = req.params;
-        const {content} = req.body ;
-        const post = await Post.findById(postId);
+exports.createComment = catchAsync(async (req, res, next) => {
+  const idempotencyKey = req.header('Idempotency-Key');
+  const { postId } = req.params;
+  const { content } = req.body;
 
-        if(!post){
-            return next(new AppError ('post not found ' , 404));
-        }
+  if (!idempotencyKey) {
+    return next(new AppError('Idempotency-Key header required', 400));
+  }
 
-        if(post.status === 'draft' && post.author.toString() !== req.user?.id){
-            return next(new AppError('post not found' , 404))
-        }
+  try {
+    const post = await Post.findById(postId);
 
-        const comment = await Comment.create({
-            content,
-            author: req.user.id,
-            post: postId
-        })
-        return res.status(201).json({success: true , data: comment})
+    if (!post) {
+      return next(new AppError('post not found', 404));
+    }
 
-})
+    if (post.status === 'draft' && post.author.toString() !== req.user.id) {
+      return next(new AppError('post not found', 404));
+    }
+
+    const comment = await Comment.create({
+      content,
+      author: req.user.id,
+      post: postId,
+      idempotencyKey
+    });
+
+    return res.status(201).json({
+      success: true,
+      data: comment
+    });
+
+  } catch (err) {
+    if (err.code === 11000) {
+      const existingComment = await Comment.findOne({
+        author: req.user.id,
+        post: postId,
+        idempotencyKey
+      });
+
+      console.warn(
+      'comment.create.retry',
+      { user: req.user.id, post: postId }
+);
+
+
+      return res.status(200).json({
+        success: true,
+        data: existingComment
+      });
+    }
+
+    return next(err);
+  }
+});
+
+
 
 
 exports.deleteComment = catchAsync(async (req , res , next) => {

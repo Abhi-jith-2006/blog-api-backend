@@ -2,22 +2,50 @@ const Post = require('../models/post.model');
 const AppError = require('../utils/AppError');
 const catchAsync = require('../utils/catchAsync');
 
-exports.createPost = catchAsync(async (req , res , next) => {
-    
-        const {title , content , status} = req.body;
-        if(!title || !content){
-            return next(new AppError('both fields required' , 400))
-        }
-        
-        const post = await Post.create({
-            title,
-            content,
-            author: req.user.id,
-            status: status || 'draft'
-        });
-        return res.status(201).json({success: true , data: post});
+exports.createPost = catchAsync(async (req, res, next) => {
+  const idempotencyKey = req.header('Idempotency-Key');
 
-})
+  if (!idempotencyKey) {
+    return next(new AppError('Idempotency-Key header required', 400));
+  }
+
+  const { title, content, status } = req.body;
+
+  if (!title || !content) {
+    return next(new AppError('both fields required', 400));
+  }
+
+  try {
+    const post = await Post.create({
+      title,
+      content,
+      author: req.user.id,
+      status: status || 'draft',
+      idempotencyKey
+    });
+
+    return res.status(201).json({
+      success: true,
+      data: post
+    });
+
+  } catch (err) {
+    if (err.code === 11000) {
+      const existingPost = await Post.findOne({
+        author: req.user.id,
+        idempotencyKey
+      });
+
+      return res.status(200).json({
+        success: true,
+        data: existingPost
+      });
+    }
+
+    return next(err); // NON-NEGOTIABLE
+  }
+});
+
 
 exports.getAllPosts = catchAsync(async (req, res, next) => {
   const { page = 1, limit = 10, status, author, search } = req.query;

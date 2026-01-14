@@ -20,11 +20,20 @@ const postSchema = new mongoose.Schema(
       type: String,
       enum: ['draft' , 'archieved' , 'published'],
       default: 'draft'
+    },
+    idempotencyKey: {
+      type: String,
+      required: true
     }
   },
   {
     timestamps: true
   }
 );
+
+postSchema.index(
+  { idempotencyKey: 1 , author: 1},
+  {unique: true}
+)
 
 module.exports = mongoose.model('Post', postSchema);
