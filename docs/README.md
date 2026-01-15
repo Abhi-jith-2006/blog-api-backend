@@ -257,4 +257,4 @@ This allows tracing:
 ## OPEN QUESTIONS / FUTURE HARDENING
 - Should idempotency keys expire?
 - Should comment creation be fully transactional with post state?
-- Should comment count be derived instead of stored?
+- Should comment count be derived instead of stored ?
